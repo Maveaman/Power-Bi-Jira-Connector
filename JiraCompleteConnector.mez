@@ -1,0 +1,236 @@
+
+section JiraCompleteConnector;
+
+/* ===============================
+   PUBLIC ENTRY POINT
+================================ */
+[DataSource.Kind="JiraComplete", Publish="JiraComplete.Publish"]
+shared JiraComplete.Contents = (JiraDomain as text) =>
+let
+    NavTable = CreateNavigation(JiraDomain)
+in
+    NavTable;
+
+/* ===============================
+   DATASOURCE DEFINITION
+================================ */
+JiraComplete = [
+    TestConnection = (dataSourcePath) => { "JiraComplete.Contents", dataSourcePath },
+    Authentication = [
+        OAuth = [
+            StartLogin = StartLogin,
+            FinishLogin = FinishLogin,
+            Refresh = RefreshToken
+        ]
+    ],
+    Label = "Jira Complete Connector"
+];
+
+/* ===============================
+   OAUTH 2.0 PLACEHOLDERS
+================================ */
+ClientID = "YOUR_CLIENT_ID_HERE",
+ClientSecret = "YOUR_CLIENT_SECRET_HERE",
+RedirectUri = "https://oauth.powerbi.com/views/oauthredirect.html",
+Scope = "read:jira-user read:jira-work write:jira-work";
+
+/* START LOGIN */
+StartLogin = (resourceUrl, state, display) =>
+    let
+        LoginUrl = "https://auth.atlassian.com/authorize?" &
+            "audience=api.atlassian.com" &
+            "&client_id=" & ClientID &
+            "&scope=" & Scope &
+            "&redirect_uri=" & RedirectUri &
+            "&response_type=code" &
+            "&prompt=consent"
+    in
+        [
+            LoginUri = LoginUrl,
+            CallbackUri = RedirectUri,
+            Context = null
+        ];
+
+/* FINISH LOGIN */
+FinishLogin = (context, callbackUri, state) =>
+    let
+        Query = Uri.Parts(callbackUri)[Query],
+        Code = Record.Field(Query, "code"),
+        TokenResponse =
+            Web.Contents(
+                "https://auth.atlassian.com/oauth/token",
+                [
+                    Content = Text.ToBinary(
+                        "grant_type=authorization_code" &
+                        "&client_id=" & ClientID &
+                        "&client_secret=" & ClientSecret &
+                        "&code=" & Code &
+                        "&redirect_uri=" & RedirectUri
+                    ),
+                    Headers=[#"Content-type"="application/x-www-form-urlencoded"],
+                    ManualStatusHandling={400,401,403,500}
+                ]
+            ),
+        Json = Json.Document(TokenResponse),
+        AccessToken = Json[access_token],
+        RefreshToken = Json[refresh_token]
+    in
+        [
+            AccessToken=AccessToken,
+            RefreshToken=RefreshToken
+        ];
+
+/* REFRESH TOKEN */
+RefreshToken = (refreshToken) =>
+let
+    TokenResponse =
+        Web.Contents(
+            "https://auth.atlassian.com/oauth/token",
+            [
+                Content = Text.ToBinary(
+                    "grant_type=refresh_token" &
+                    "&client_id=" & ClientID &
+                    "&client_secret=" & ClientSecret &
+                    "&refresh_token=" & refreshToken
+                ),
+                Headers=[#"Content-type"="application/x-www-form-urlencoded"]
+            ]
+        ),
+    Json = Json.Document(TokenResponse),
+    AccessToken = Json[access_token],
+    NewRefreshToken = Json[refresh_token]
+in
+    [
+        AccessToken=AccessToken,
+        RefreshToken=NewRefreshToken
+    ];
+
+/* ===============================
+   PUBLISH INFO
+================================ */
+JiraComplete.Publish = [
+    Beta = true,
+    Category = "Other",
+    ButtonText = { "Jira Complete Connector", "Connect to Jira Cloud" },
+    LearnMoreUrl = "https://developer.atlassian.com/cloud/jira/platform/rest/v3/",
+    SourceImage = JiraComplete.Icons,
+    SourceTypeImage = JiraComplete.Icons
+];
+
+JiraComplete.Icons = [
+    Icon16 = { Extension.Contents("Jira16.png") },
+    Icon32 = { Extension.Contents("Jira32.png") }
+];
+
+/* ===============================
+   NAVIGATION TABLE
+================================ */
+CreateNavigation = (domain as text) as table =>
+let
+    Tables = {
+        { "Issues", "All Jira Issues", GetIssues(domain) },
+        { "Projects", "All Jira Projects", GetProjects(domain) },
+        { "Boards", "Jira Boards", GetBoards(domain) },
+        { "Sprints", "Jira Sprints", GetSprints(domain) }
+    },
+    Nav = Table.FromRecords(
+        List.Transform(
+            Tables,
+            (t) => [
+                Name = t{0},
+                Description = t{1},
+                Data = t{2},
+                ItemKind = "Table",
+                ItemName = "Table",
+                IsLeaf = true
+            ]
+        )
+    )
+in
+    Nav;
+
+/* ===============================
+   HELPER FUNCTIONS
+================================ */
+BaseUrl = (domain as text) => "https://" & domain & ".atlassian.net";
+
+GetJson = (url as text, optional query as nullable record) =>
+let
+    Source =
+        Web.Contents(
+            url,
+            [
+                Headers = [Accept="application/json", Authorization="Bearer " & Extension.CurrentCredential()[AccessToken]],
+                Query=query
+            ]
+        ),
+    Json = Json.Document(Source)
+in
+    Json;
+
+/* ===============================
+   ISSUES WITH PAGINATION
+================================ */
+GetIssues = (domain as text) =>
+let
+    Url = BaseUrl(domain) & "/rest/api/3/search",
+    GetPage = (startAt as number) =>
+        let
+            Json = GetJson(Url,[jql="ORDER BY created DESC", startAt=Text.From(startAt), maxResults="100"]),
+            Issues = Json[issues]
+        in
+            Issues,
+    Pages = List.Generate(
+        ()=>[i=0, data=GetPage(0)],
+        each List.Count([data])>0,
+        each [i=[i]+100, data=GetPage([i])],
+        each [data]
+    ),
+    AllIssues = List.Combine(Pages),
+    Tbl = Table.FromList(AllIssues, Splitter.SplitByNothing()),
+    Expand1 = Table.ExpandRecordColumn(Tbl, "Column1", {"key","fields"},{"Issue Key","Fields"}),
+    Expand2 = Table.ExpandRecordColumn(Expand1,"Fields",{"summary","status","assignee","created","customfield_10016"},{"Summary","Status","Assignee","Created","Story Points"}),
+    StatusExpand = Table.ExpandRecordColumn(Expand2,"Status",{"name"},{"Status"}),
+    AssigneeExpand = Table.ExpandRecordColumn(StatusExpand,"Assignee",{"displayName"},{"Assignee"})
+in
+    AssigneeExpand;
+
+/* ===============================
+   PROJECTS
+================================ */
+GetProjects = (domain as text) =>
+let
+    Url = BaseUrl(domain) & "/rest/api/3/project",
+    Json = GetJson(Url),
+    Tbl = Table.FromList(Json, Splitter.SplitByNothing()),
+    Expand = Table.ExpandRecordColumn(Tbl,"Column1",{"id","key","name"},{"Project ID","Project Key","Project Name"})
+in
+    Expand;
+
+/* ===============================
+   BOARDS
+================================ */
+GetBoards = (domain as text) =>
+let
+    Url = BaseUrl(domain) & "/rest/agile/1.0/board",
+    Json = GetJson(Url),
+    Boards = Json[values],
+    Tbl = Table.FromList(Boards,Splitter.SplitByNothing()),
+    Expand = Table.ExpandRecordColumn(Tbl,"Column1",{"id","name","type"},{"Board ID","Board Name","Board Type"})
+in
+    Expand;
+
+/* ===============================
+   SPRINTS
+================================ */
+GetSprints = (domain as text) =>
+let
+    Boards = GetBoards(domain),
+    FirstBoardId = Boards{0}[Board ID],
+    Url = BaseUrl(domain) & "/rest/agile/1.0/board/" & Text.From(FirstBoardId) & "/sprint",
+    Json = GetJson(Url),
+    Sprints = Json[values],
+    Tbl = Table.FromList(Sprints,Splitter.SplitByNothing()),
+    Expand = Table.ExpandRecordColumn(Tbl,"Column1",{"id","name","state","startDate","endDate"},{"Sprint ID","Sprint Name","State","Start Date","End Date"})
+in
+    Expand;
