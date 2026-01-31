@@ -1,0 +1,12 @@
+Installation
+
+1. Copy `dist/JiraCompleteConnector.mez` to:
+
+
+C:\Users<YourUserName>\Documents\Power BI\Custom Connectors
+
+
+2. Copy optional icons from `icons/`
+3. Open Power BI → Options → Security → Data Extensions → Allow any extension
+4. Restart Power BI
+5. Get Data → Other → Jira Complete Connector → Enter OAuth credentials

@@ -1,0 +1,20 @@
+JiraCompleteConnector/
+│
+├── src/
+│   ├── JiraConnector.pq
+│   ├── OAuthHandler.pq
+│   └── Utils.pq
+│
+├── dist/
+│   └── JiraCompleteConnector.mez
+│
+├── icons/
+│   ├── Jira16.png
+│   └── Jira32.png
+│
+├── examples/
+│   └── SampleReport.pbix
+│
+├── README.md
+├── LICENSE
+└── .gitignore

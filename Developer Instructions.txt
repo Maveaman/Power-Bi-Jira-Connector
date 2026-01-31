@@ -1,0 +1,7 @@
+Developer Instructions
+
+- `src/` – All Power Query / M code
+- `dist/` – Compiled `.mez`
+- `examples/` – Sample PBIX report
+- Build: Open Power Query SDK / Visual Studio, load `.pq` files, compile `.mez`
+

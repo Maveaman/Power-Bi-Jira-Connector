@@ -1,0 +1,8 @@
+gitignore
+
+
+# Ignore compiled binaries
+*.mez
+
+# Ignore Power BI files
+*.pbix

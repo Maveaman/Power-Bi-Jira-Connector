@@ -1,0 +1,19 @@
+dist/JiraCompleteConnector.mez
+
+
+[PLACEHOLDER] – This is the compiled .mez file ready for Power BI
+
+
+> Replace [PLACEHOLDER] with your compiled .mez file.
+
+---
+
+### *icons/Jira16.png* & *icons/Jira32.png*
+
+* Use *Jira logos* or any placeholder images.
+
+---
+
+### *examples/SampleReport.pbix*
+
+* Include a *Power BI report* using this connector with Projects, Boards, Sprints, and Issues

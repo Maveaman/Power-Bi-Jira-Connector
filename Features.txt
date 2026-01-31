@@ -1,0 +1,7 @@
+Features
+
+- Connect to Jira Cloud using **OAuth 2.0**
+- Access Projects, Boards, Sprints, Issues
+- Multi-user dashboards
+- Ready for Power BI Service
+- Full source code included
