@@ -1,0 +1,24 @@
+pq
+section OAuthHandler;
+
+shared GetAccessToken = () =>
+let
+    ClientID = "YOUR_CLIENT_ID",
+    ClientSecret = "YOUR_CLIENT_SECRET",
+    RedirectURI = "YOUR_REDIRECT_URI",
+    AuthURL = "https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=" 
+              & ClientID & "&scope=read%3Ajira-work&redirect_uri=" & RedirectURI & "&response_type=code&prompt=consent",
+
+    // Step 1: Direct user to authorize and get code
+    AuthCode = Extension.CurrentCredential()[access_token], 
+
+    // Step 2: Exchange code for access token
+    TokenResponse = Json.Document(Web.Contents("https://auth.atlassian.com/oauth/token",
+        [
+            Content = Text.ToBinary("{""grant_type"": ""authorization_code"", ""client_id"": """ & ClientID & """, ""client_secret"": """ & ClientSecret & """, ""code"": """ & AuthCode & """, ""redirect_uri"": """ & RedirectURI & """}"),
+            Headers=[#"Content-Type"="application/json"]
+        ])),
+
+    AccessToken = TokenResponse[access_token]
+in
+    AccessToken;
